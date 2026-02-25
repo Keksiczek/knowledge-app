@@ -69,11 +69,39 @@ nav { display: flex; gap: 4px; margin-left: 8px; }
 .nav-btn:hover { background: var(--surface2); color: var(--text); }
 .nav-btn.active { background: var(--surface2); color: var(--text); font-weight: 600; }
 
+/* ── Provider bar ────────────────────────────────────────────────────────── */
+.provider-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 10px;
+}
+.provider-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.provider-bar select {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+  max-width: 130px;
+}
+.provider-bar select option { background: var(--surface2); }
+.btn-sm { padding: 4px 10px !important; font-size: 12px !important; }
+
 .health-dot {
   width: 10px; height: 10px;
   border-radius: 50%;
   background: var(--text-muted);
-  margin-left: auto;
+  flex-shrink: 0;
   transition: background .3s;
 }
 .health-dot.ok     { background: var(--success); }
@@ -293,6 +321,31 @@ main {
 .highlights-section li:last-child { border-bottom: none; }
 
 /* ── Ask Tab ─────────────────────────────────────────────────────────────── */
+.ask-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: -6px;
+}
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.toggle-label input[type="checkbox"] { accent-color: var(--accent); }
+
+/* Streaming cursor blink */
+.stream-cursor::after {
+  content: "▋";
+  animation: blink .7s step-start infinite;
+  color: var(--accent);
+}
+@keyframes blink { 50% { opacity: 0; } }
+
 .ask-input-row {
   display: flex;
   gap: 8px;

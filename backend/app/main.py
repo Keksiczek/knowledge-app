@@ -20,7 +20,8 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .database import init_db
-from .routers import ask, highlights, presentation, summarize, upload
+from .routers import ask, highlights, presentation, providers, summarize, upload
+from .services.providers import get_provider
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Logging
@@ -41,10 +42,11 @@ settings = get_settings()
 app = FastAPI(
     title="Knowledge App",
     description=(
-        "Offline-first document intelligence: upload files, extract text, "
-        "and use a local LLM for summaries, highlights, presentations, and Q&A."
+        "Offline-first document intelligence. Upload files and use any local or "
+        "cloud LLM (Ollama, LM Studio, OpenAI, Anthropic …) for summaries, "
+        "highlights, presentations, and RAG Q&A."
     ),
-    version="1.0.0",
+    version="2.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
 )
@@ -71,15 +73,18 @@ async def add_process_time_header(request: Request, call_next):
     return response
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Startup / shutdown
+# Startup
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.on_event("startup")
 async def startup_event():
     logger.info("Initialising database …")
     init_db()
-    logger.info("Knowledge App started — LLM backend: %s", settings.llm.backend)
-
+    p = get_provider()
+    logger.info(
+        "Knowledge App v2 started — provider: %s | model: %s | db: %s",
+        p.provider_name, p.active_model, settings.database.engine,
+    )
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Routers
@@ -90,6 +95,7 @@ app.include_router(summarize.router)
 app.include_router(highlights.router)
 app.include_router(presentation.router)
 app.include_router(ask.router)
+app.include_router(providers.router)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Health check
@@ -97,20 +103,21 @@ app.include_router(ask.router)
 
 @app.get("/api/health", tags=["system"])
 async def health():
+    p = get_provider()
     return {
         "status": "ok",
-        "llm_backend": settings.llm.backend,
+        "provider": p.provider_name,
+        "model":    p.active_model,
         "db_engine": settings.database.engine,
     }
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Serve frontend static files (production build)
+# Frontend static files
 # ──────────────────────────────────────────────────────────────────────────────
 
 _FRONTEND_DIR = Path(__file__).parent.parent.parent / "frontend"
 
 if _FRONTEND_DIR.exists():
-    # Serve static assets (JS, CSS, images)
     _PUBLIC_DIR = _FRONTEND_DIR / "public"
     if _PUBLIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(_PUBLIC_DIR)), name="static")
@@ -118,7 +125,6 @@ if _FRONTEND_DIR.exists():
     @app.get("/", include_in_schema=False)
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_frontend(full_path: str = ""):
-        # Don't intercept API or docs routes
         if full_path.startswith("api/") or full_path.startswith("static/"):
             return JSONResponse(status_code=404, content={"detail": "Not found"})
         index = _FRONTEND_DIR / "index.html"

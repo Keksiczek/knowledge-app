@@ -1,37 +1,38 @@
 /**
- * app.js – Knowledge App frontend logic
+ * app.js – Knowledge App frontend logic (v2)
  *
- * No external dependencies. Talks to the FastAPI backend at /api/*.
- * Handles: navigation, drag-and-drop upload, library, summary,
- *          highlights, presentation, and RAG Q&A.
+ * New in v2:
+ *   • Provider selector: load providers from /api/providers, switch via UI
+ *   • Model selector: fetch available models per provider
+ *   • SSE streaming in Ask tab (token-by-token via /api/ask/stream)
  */
 
 'use strict';
 
-// ── Config ──────────────────────────────────────────────────────────────────
+// ── Config ───────────────────────────────────────────────────────────────────
 const API = '';  // empty = same origin; change to 'http://localhost:8000' for dev
 
 // ── State ────────────────────────────────────────────────────────────────────
-let selectedDocId = null;
-let pollingTimers = {};
+let selectedDocId  = null;
+let pollingTimers  = {};
+let activeStream   = null;   // AbortController for current SSE stream
 
-// ── Utility helpers ──────────────────────────────────────────────────────────
-
+// ── Utilities ─────────────────────────────────────────────────────────────────
 function $(id) { return document.getElementById(id); }
 
 function showToast(msg, type = 'info', duration = 3500) {
   const tc = $('toast-container');
-  const t = document.createElement('div');
+  const t  = document.createElement('div');
   t.className = `toast ${type}`;
   t.textContent = msg;
   tc.appendChild(t);
   setTimeout(() => t.remove(), duration);
 }
 
-function formatBytes(bytes) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+function formatBytes(b) {
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  return `${(b / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function formatDate(iso) {
@@ -41,8 +42,22 @@ function formatDate(iso) {
 }
 
 function fileIcon(fmt) {
-  const icons = { pdf:'📄', docx:'📝', txt:'📃', md:'📋', pptx:'📊' };
-  return icons[fmt] || '📁';
+  return { pdf:'📄', docx:'📝', txt:'📃', md:'📋', pptx:'📊' }[fmt] || '📁';
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function setLoading(el, msg) {
+  el.innerHTML = `<span class="spinner-text">${escapeHtml(msg)}</span>`;
+}
+
+function disableBtn(id, disabled) {
+  const btn = $(id);
+  if (btn) btn.disabled = disabled;
 }
 
 async function apiFetch(path, opts = {}) {
@@ -59,22 +74,96 @@ async function apiFetch(path, opts = {}) {
 }
 
 async function apiJSON(path, opts = {}) {
-  const res = await apiFetch(path, opts);
-  return res.json();
+  return (await apiFetch(path, opts)).json();
 }
 
 // ── Health check ──────────────────────────────────────────────────────────────
 async function checkHealth() {
   const dot = $('health-indicator');
   try {
-    const data = await apiJSON('/api/health');
+    const d = await apiJSON('/api/health');
     dot.className = 'health-dot ok';
-    dot.title = `Backend OK — ${data.llm_backend} / ${data.db_engine}`;
+    dot.title = `Backend OK — ${d.provider}/${d.model} · ${d.db_engine}`;
   } catch {
     dot.className = 'health-dot error';
     dot.title = 'Backend unreachable';
   }
 }
+
+// ── Provider selector ─────────────────────────────────────────────────────────
+
+async function loadProviders() {
+  try {
+    const [listData, activeData] = await Promise.all([
+      apiJSON('/api/providers'),
+      apiJSON('/api/providers/active'),
+    ]);
+
+    const sel = $('provider-select');
+    sel.innerHTML = '';
+    listData.providers.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.name;
+      opt.textContent = p.name + (p.enabled ? '' : ' (disabled)');
+      opt.selected = p.active;
+      sel.appendChild(opt);
+    });
+
+    // Load models for the active provider
+    await loadModels(activeData.provider, activeData.model);
+  } catch (err) {
+    showToast(`Could not load providers: ${err.message}`, 'error');
+  }
+}
+
+async function loadModels(providerName, currentModel) {
+  const sel = $('model-select');
+  sel.innerHTML = '<option value="">Loading…</option>';
+  try {
+    const data = await apiJSON(`/api/providers/${providerName}/models`);
+    sel.innerHTML = '';
+    if (!data.models.length) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = '(default)';
+      sel.appendChild(opt);
+      return;
+    }
+    data.models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      opt.textContent = m;
+      opt.selected = m === currentModel;
+      sel.appendChild(opt);
+    });
+  } catch {
+    sel.innerHTML = '<option value="">(default)</option>';
+  }
+}
+
+// Reload models when provider changes in the dropdown
+$('provider-select').addEventListener('change', () => {
+  loadModels($('provider-select').value, '');
+});
+
+// Apply button – switch provider + model
+$('btn-apply-provider').addEventListener('click', async () => {
+  const provider = $('provider-select').value;
+  const model    = $('model-select').value || null;
+  disableBtn('btn-apply-provider', true);
+  try {
+    const data = await apiJSON('/api/providers/switch', {
+      method: 'POST',
+      body: JSON.stringify({ provider, model }),
+    });
+    showToast(`Switched to ${data.switched_to} / ${data.model}`, 'success');
+    await checkHealth();
+  } catch (err) {
+    showToast(`Switch failed: ${err.message}`, 'error');
+  } finally {
+    disableBtn('btn-apply-provider', false);
+  }
+});
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 function showView(name) {
@@ -99,12 +188,9 @@ dropZone.addEventListener('drop', e => {
   handleFiles([...e.dataTransfer.files]);
 });
 fileInput.addEventListener('change', () => handleFiles([...fileInput.files]));
-dropZone.addEventListener('click', e => {
-  if (e.target !== fileInput) fileInput.click();
-});
+dropZone.addEventListener('click', e => { if (e.target !== fileInput) fileInput.click(); });
 
 function handleFiles(files) {
-  if (!files.length) return;
   files.forEach(uploadFile);
 }
 
@@ -122,7 +208,6 @@ function addQueueItem(file, docId) {
     </div>
     <span class="status-badge pending">pending</span>`;
   queue.prepend(el);
-  return el;
 }
 
 function updateQueueItem(docId, status) {
@@ -135,20 +220,15 @@ function updateQueueItem(docId, status) {
 async function uploadFile(file) {
   const tmpId = 'tmp-' + Math.random().toString(36).slice(2);
   addQueueItem(file, tmpId);
-
   const form = new FormData();
   form.append('files', file);
-
   try {
     const res = await fetch(API + '/api/upload', { method: 'POST', body: form });
     if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
     const data = await res.json();
-    const doc = data.documents[0];
-
-    // Replace temp item with real id item
+    const doc  = data.documents[0];
     const tmpEl = $(`qi-${tmpId}`);
     if (tmpEl) tmpEl.id = `qi-${doc.id}`;
-
     updateQueueItem(doc.id, doc.status);
     pollDocumentStatus(doc.id);
   } catch (err) {
@@ -185,7 +265,7 @@ async function loadLibrary() {
     const data = await apiJSON('/api/documents');
     renderDocList(data.documents);
   } catch (err) {
-    list.innerHTML = `<p class="empty-state">Error loading documents: ${escapeHtml(err.message)}</p>`;
+    list.innerHTML = `<p class="empty-state">Error: ${escapeHtml(err.message)}</p>`;
   }
 }
 
@@ -214,18 +294,12 @@ function renderDocList(docs) {
 }
 
 function selectDocument(doc) {
-  if (doc.status !== 'ready') {
-    showToast('Document is not ready yet', 'info');
-    return;
-  }
+  if (doc.status !== 'ready') { showToast('Document is not ready yet', 'info'); return; }
   selectedDocId = doc.id;
   document.querySelectorAll('.doc-card').forEach(c => c.classList.toggle('selected', c.dataset.id === doc.id));
-
   $('panel-doc-name').textContent = doc.original_name;
   $('analysis-panel').classList.remove('hidden');
-
-  // Reset outputs
-  ['summary-output', 'highlights-output', 'presentation-output'].forEach(id => $(`${id}`).innerHTML = '');
+  ['summary-output', 'highlights-output', 'presentation-output'].forEach(id => $(id).innerHTML = '');
   $('ask-history').innerHTML = '';
 }
 
@@ -253,7 +327,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 $('btn-summarize').addEventListener('click', async () => {
   if (!selectedDocId) return;
   const style = $('summary-style').value;
-  const out = $('summary-output');
+  const out   = $('summary-output');
   setLoading(out, 'Generating summary…');
   disableBtn('btn-summarize', true);
   try {
@@ -294,13 +368,11 @@ $('btn-highlights').addEventListener('click', async () => {
 
 function renderHighlights(container, data) {
   container.innerHTML = '';
-
   const sections = [
     { key: 'key_concepts',  label: 'Key Concepts' },
     { key: 'key_sentences', label: 'Key Sentences' },
     { key: 'topics',        label: 'Main Topics' },
   ];
-
   sections.forEach(({ key, label }) => {
     const items = data[key];
     if (!items || !items.length) return;
@@ -317,7 +389,6 @@ function renderHighlights(container, data) {
     sec.appendChild(ul);
     container.appendChild(sec);
   });
-
   if (!container.innerHTML) container.textContent = 'No highlights extracted.';
 }
 
@@ -325,23 +396,23 @@ function renderHighlights(container, data) {
 $('btn-presentation').addEventListener('click', async () => {
   if (!selectedDocId) return;
   const format = $('presentation-format').value;
-  const out = $('presentation-output');
+  const out    = $('presentation-output');
 
   if (format === 'pptx') {
     setLoading(out, 'Generating PPTX…');
     disableBtn('btn-presentation', true);
     try {
-      const res = await apiFetch('/api/presentation', {
+      const res  = await apiFetch('/api/presentation', {
         method: 'POST',
         body: JSON.stringify({ document_id: selectedDocId, format: 'pptx' }),
       });
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
       a.href = url;
-      const cd = res.headers.get('Content-Disposition') || '';
+      const cd    = res.headers.get('Content-Disposition') || '';
       const match = cd.match(/filename="([^"]+)"/);
-      a.download = match ? match[1] : 'presentation.pptx';
+      a.download  = match ? match[1] : 'presentation.pptx';
       a.click();
       URL.revokeObjectURL(url);
       out.textContent = 'PPTX downloaded!';
@@ -355,7 +426,6 @@ $('btn-presentation').addEventListener('click', async () => {
     return;
   }
 
-  // Markdown
   setLoading(out, 'Generating outline…');
   disableBtn('btn-presentation', true);
   try {
@@ -379,61 +449,131 @@ $('ask-input').addEventListener('keydown', e => { if (e.key === 'Enter') submitQ
 
 async function submitQuestion() {
   if (!selectedDocId) return;
-  const input = $('ask-input');
+  const input    = $('ask-input');
   const question = input.value.trim();
   if (!question) return;
+
+  // Cancel any ongoing stream
+  if (activeStream) { activeStream.abort(); activeStream = null; }
 
   input.value = '';
   disableBtn('btn-ask', true);
   input.disabled = true;
 
   const history = $('ask-history');
-
-  // Show question bubble
-  const pair = document.createElement('div');
+  const pair    = document.createElement('div');
   pair.className = 'qa-pair';
-  pair.innerHTML = `<div class="qa-question">${escapeHtml(question)}</div>
-                    <div class="qa-answer"><span class="spinner-text">Thinking…</span></div>`;
+
+  const answerDiv = document.createElement('div');
+  answerDiv.className = 'qa-answer';
+
+  pair.innerHTML = `<div class="qa-question">${escapeHtml(question)}</div>`;
+  pair.appendChild(answerDiv);
   history.appendChild(pair);
   history.scrollTop = history.scrollHeight;
 
+  const useStream = $('stream-toggle').checked;
+
+  if (useStream) {
+    await streamAnswer(question, answerDiv, pair, history);
+  } else {
+    await blockingAnswer(question, answerDiv, pair);
+  }
+
+  disableBtn('btn-ask', false);
+  input.disabled = false;
+  input.focus();
+  history.scrollTop = history.scrollHeight;
+}
+
+// Blocking (cached) path
+async function blockingAnswer(question, answerDiv, pair) {
+  answerDiv.innerHTML = '<span class="spinner-text">Thinking…</span>';
   try {
     const data = await apiJSON('/api/ask', {
       method: 'POST',
       body: JSON.stringify({ document_id: selectedDocId, question }),
     });
-    const answerDiv = pair.querySelector('.qa-answer');
     answerDiv.textContent = data.answer;
     const meta = document.createElement('div');
     meta.className = 'qa-meta';
     meta.textContent = `${data.sources_used} context chunk(s)${data.cached ? ' · cached' : ''}`;
     pair.appendChild(meta);
   } catch (err) {
-    pair.querySelector('.qa-answer').textContent = `Error: ${err.message}`;
-  } finally {
-    disableBtn('btn-ask', false);
-    input.disabled = false;
-    input.focus();
-    history.scrollTop = history.scrollHeight;
+    answerDiv.textContent = `Error: ${err.message}`;
   }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function setLoading(el, msg) {
-  el.innerHTML = `<span class="spinner-text">${escapeHtml(msg)}</span>`;
-}
+// Streaming (SSE) path
+async function streamAnswer(question, answerDiv, pair, history) {
+  answerDiv.className = 'qa-answer stream-cursor';
+  answerDiv.textContent = '';
 
-function disableBtn(id, disabled) {
-  const btn = $(id);
-  if (btn) btn.disabled = disabled;
-}
+  const controller = new AbortController();
+  activeStream = controller;
 
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+  try {
+    const res = await fetch(API + '/api/ask/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ document_id: selectedDocId, question }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || res.statusText);
+    }
+
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let   buffer  = '';
+    let   sources = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();   // keep incomplete last line
+
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const raw = line.slice(5).trim();
+        if (!raw) continue;
+        try {
+          const msg = JSON.parse(raw);
+          if (msg.type === 'meta') {
+            sources = msg.sources_used;
+          } else if (msg.type === 'token') {
+            answerDiv.textContent += msg.text;
+            history.scrollTop = history.scrollHeight;
+          } else if (msg.type === 'done') {
+            answerDiv.className = 'qa-answer';
+            const meta = document.createElement('div');
+            meta.className = 'qa-meta';
+            meta.textContent = `${sources} context chunk(s) · streamed`;
+            pair.appendChild(meta);
+          } else if (msg.type === 'error') {
+            answerDiv.className = 'qa-answer';
+            answerDiv.textContent = `Error: ${msg.message}`;
+          }
+        } catch {}
+      }
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      answerDiv.className = 'qa-answer';
+      answerDiv.textContent = `Stream error: ${err.message}`;
+    }
+  } finally {
+    answerDiv.classList.remove('stream-cursor');
+    activeStream = null;
+  }
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 checkHealth();
+loadProviders();
 setInterval(checkHealth, 30000);

@@ -1,50 +1,70 @@
 # Knowledge App – Configuration
-# Copy and adapt this file to your local setup
+# Environment variables are expanded with ${VAR_NAME} syntax in any string field.
 
 llm:
-  # Backend type: "ollama" | "lmstudio" | "textgen"
-  backend: "ollama"
+  # Which provider to use by default on startup
+  default_provider: "ollama"
 
-  # Ollama settings
-  ollama:
-    base_url: "http://localhost:11434"
-    model: "llama3.2"          # or mistral, phi3, gemma2, etc.
-    timeout: 120               # seconds
-
-  # LM Studio settings (OpenAI-compatible endpoint)
-  lmstudio:
-    base_url: "http://localhost:1234/v1"
-    model: "local-model"
-    timeout: 120
-
-  # text-generation-webui settings
-  textgen:
-    base_url: "http://localhost:5000"
-    model: ""
-    timeout: 120
-
-  # Generation parameters
+  # Shared generation parameters (apply to all providers unless overridden)
   generation:
     temperature: 0.2
     max_tokens: 4096
     top_p: 0.9
 
+  # Provider-specific configuration
+  providers:
+
+    ollama:
+      enabled: true
+      base_url: "http://localhost:11434"
+      default_model: "llama3.2:latest"
+      timeout: 120
+
+    lm_studio:
+      enabled: false
+      base_url: "http://localhost:1234/v1"
+      api_key: ""                          # optional – LM Studio usually needs none
+      default_model: "local-model"
+      timeout: 120
+
+    text_generation_webui:
+      enabled: false
+      base_url: "http://localhost:5000"
+      default_model: "default"
+      timeout: 120
+
+    localai:
+      enabled: false
+      base_url: "http://localhost:8080/v1"
+      api_key: ""
+      default_model: "gpt-3.5-turbo"
+      timeout: 120
+
+    openai:
+      enabled: false
+      api_key: "${OPENAI_API_KEY}"         # loaded from environment
+      default_model: "gpt-4o"
+      organization: ""                     # optional OpenAI org ID
+      timeout: 60
+
+    anthropic:
+      enabled: false
+      api_key: "${ANTHROPIC_API_KEY}"
+      default_model: "claude-sonnet-4-5-20250514"
+      timeout: 60
+
 database:
-  # "sqlite" or "duckdb"
   engine: "sqlite"
-  path: "./data/knowledge.db"   # relative to backend/
+  path: "./data/knowledge.db"
 
 storage:
-  upload_dir: "./uploads"        # where raw uploaded files are stored
+  upload_dir: "./uploads"
   max_file_size_mb: 50
 
 rag:
-  # Chunk size for splitting documents before embedding/retrieval
   chunk_size: 512
   chunk_overlap: 64
-  # Number of top chunks to retrieve for Q&A
   top_k: 5
-  # Embedding model (local via sentence-transformers)
   embedding_model: "all-MiniLM-L6-v2"
 
 app:

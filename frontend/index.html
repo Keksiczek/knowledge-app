@@ -21,6 +21,19 @@
     <button class="nav-btn active" data-view="upload">Upload</button>
     <button class="nav-btn" data-view="library">Library</button>
   </nav>
+
+  <!-- Provider selector -->
+  <div class="provider-bar">
+    <span class="provider-label">LLM:</span>
+    <select id="provider-select" title="Active LLM provider">
+      <option value="">Loading…</option>
+    </select>
+    <select id="model-select" title="Active model">
+      <option value="">default</option>
+    </select>
+    <button class="btn-secondary btn-sm" id="btn-apply-provider">Apply</button>
+  </div>
+
   <div id="health-indicator" class="health-dot" title="Backend status"></div>
 </header>
 
@@ -111,6 +124,12 @@
       <div class="ask-input-row">
         <input type="text" id="ask-input" placeholder="Ask a question about this document…" />
         <button class="btn-primary" id="btn-ask">Ask</button>
+      </div>
+      <div class="ask-mode-row">
+        <label class="toggle-label">
+          <input type="checkbox" id="stream-toggle" checked />
+          <span>Stream response</span>
+        </label>
       </div>
       <div id="ask-history" class="ask-history"></div>
     </div>

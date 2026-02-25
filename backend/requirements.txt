@@ -7,7 +7,7 @@ python-multipart>=0.0.9       # required for FastAPI file uploads
 pydantic>=2.7.0
 pyyaml>=6.0.1
 
-# ── HTTP client (LLM backend calls) ─────────────────────────────────────────
+# ── HTTP client (local LLM backend calls + streaming) ────────────────────────
 httpx>=0.27.0
 
 # ── Document text extraction ─────────────────────────────────────────────────
@@ -25,6 +25,10 @@ sentence-transformers>=2.7.0  # local embeddings (all-MiniLM-L6-v2)
 
 # ── Token counting (optional, falls back to char/4 heuristic) ────────────────
 # tiktoken>=0.7.0
+
+# ── Cloud LLM providers (install only what you need) ─────────────────────────
+openai>=1.30.0                 # OpenAI API – also works with LocalAI if needed
+anthropic>=0.25.0              # Anthropic Claude API
 
 # ── Database ─────────────────────────────────────────────────────────────────
 # sqlite3 is part of the Python standard library – no extra package needed.

@@ -1,131 +1,70 @@
 """
-llm_service.py – unified interface to local LLM backends.
+llm_service.py – thin facade over the provider registry.
 
-Supported backends (configured in config.yaml):
-  • ollama        – native Ollama REST API
-  • lmstudio      – OpenAI-compatible endpoint (LM Studio)
-  • textgen       – text-generation-webui API
+Public surface used by routers:
+  generate(prompt)            – blocking full response
+  stream_generate(prompt)     – async generator of token chunks
+  get_active_provider()       – current LLMProvider instance
+  switch_provider(name, model)
+  list_providers()
+  build_*_prompt(...)         – prompt template helpers
 """
 from __future__ import annotations
 
-import json
 import logging
-from typing import Any
+from typing import Any, AsyncIterator, Optional
 
-import httpx
-
-from ..config import get_settings
+from .providers import (
+    get_provider,
+    list_providers,
+    switch_provider as _switch_provider,
+)
+from .providers.base import LLMProvider
 
 logger = logging.getLogger(__name__)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Backend implementations
+# Core generation API
 # ──────────────────────────────────────────────────────────────────────────────
-
-class _OllamaBackend:
-    def __init__(self) -> None:
-        cfg = get_settings().llm.ollama
-        self.base_url = cfg.base_url.rstrip("/")
-        self.model = cfg.model
-        self.timeout = cfg.timeout
-
-    def generate(self, prompt: str, **gen_kwargs: Any) -> str:
-        settings = get_settings().llm.generation
-        payload = {
-            "model": self.model,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": gen_kwargs.get("temperature", settings.temperature),
-                "num_predict": gen_kwargs.get("max_tokens", settings.max_tokens),
-                "top_p": gen_kwargs.get("top_p", settings.top_p),
-            },
-        }
-        with httpx.Client(timeout=self.timeout) as client:
-            resp = client.post(f"{self.base_url}/api/generate", json=payload)
-            resp.raise_for_status()
-        return resp.json().get("response", "")
-
-
-class _LMStudioBackend:
-    """Uses the OpenAI-compatible /v1/chat/completions endpoint."""
-
-    def __init__(self) -> None:
-        cfg = get_settings().llm.lmstudio
-        self.base_url = cfg.base_url.rstrip("/")
-        self.model = cfg.model
-        self.timeout = cfg.timeout
-
-    def generate(self, prompt: str, **gen_kwargs: Any) -> str:
-        settings = get_settings().llm.generation
-        payload = {
-            "model": self.model,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": gen_kwargs.get("temperature", settings.temperature),
-            "max_tokens": gen_kwargs.get("max_tokens", settings.max_tokens),
-            "top_p": gen_kwargs.get("top_p", settings.top_p),
-        }
-        with httpx.Client(timeout=self.timeout) as client:
-            resp = client.post(f"{self.base_url}/chat/completions", json=payload)
-            resp.raise_for_status()
-        data = resp.json()
-        return data["choices"][0]["message"]["content"]
-
-
-class _TextGenBackend:
-    """text-generation-webui API (blocking /api/v1/generate)."""
-
-    def __init__(self) -> None:
-        cfg = get_settings().llm.textgen
-        self.base_url = cfg.base_url.rstrip("/")
-        self.timeout = cfg.timeout
-
-    def generate(self, prompt: str, **gen_kwargs: Any) -> str:
-        settings = get_settings().llm.generation
-        payload = {
-            "prompt": prompt,
-            "max_new_tokens": gen_kwargs.get("max_tokens", settings.max_tokens),
-            "temperature": gen_kwargs.get("temperature", settings.temperature),
-            "top_p": gen_kwargs.get("top_p", settings.top_p),
-        }
-        with httpx.Client(timeout=self.timeout) as client:
-            resp = client.post(f"{self.base_url}/api/v1/generate", json=payload)
-            resp.raise_for_status()
-        return resp.json()["results"][0]["text"]
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Public interface
-# ──────────────────────────────────────────────────────────────────────────────
-
-_BACKENDS = {
-    "ollama":    _OllamaBackend,
-    "lmstudio":  _LMStudioBackend,
-    "textgen":   _TextGenBackend,
-}
-
-_backend_instance = None
-
-
-def _get_backend():
-    global _backend_instance
-    if _backend_instance is None:
-        name = get_settings().llm.backend
-        cls = _BACKENDS.get(name)
-        if cls is None:
-            raise ValueError(f"Unknown LLM backend: {name!r}. Choose from {list(_BACKENDS)}")
-        _backend_instance = cls()
-    return _backend_instance
-
 
 def generate(prompt: str, **kwargs: Any) -> str:
-    """Send *prompt* to the configured local LLM and return the response text."""
-    backend = _get_backend()
-    logger.debug("LLM generate | backend=%s | prompt_len=%d", type(backend).__name__, len(prompt))
-    response = backend.generate(prompt, **kwargs)
-    logger.debug("LLM response length: %d chars", len(response))
+    """Send *prompt* to the active provider and return the full response."""
+    provider = get_provider()
+    logger.debug(
+        "generate | provider=%s model=%s prompt_len=%d",
+        provider.provider_name, provider.active_model, len(prompt),
+    )
+    response = provider.generate(prompt, **kwargs)
+    logger.debug("response length: %d chars", len(response))
     return response
+
+
+async def stream_generate(prompt: str, **kwargs: Any) -> AsyncIterator[str]:
+    """Yield token chunks from the active provider (async generator)."""
+    provider = get_provider()
+    logger.debug(
+        "stream_generate | provider=%s model=%s",
+        provider.provider_name, provider.active_model,
+    )
+    async for token in provider.stream_generate(prompt, **kwargs):
+        yield token
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Provider management helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+def get_active_provider() -> LLMProvider:
+    return get_provider()
+
+
+def switch_provider(name: str, model: Optional[str] = None) -> LLMProvider:
+    return _switch_provider(name, model)
+
+
+def get_provider_list() -> list[dict]:
+    return list_providers()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
