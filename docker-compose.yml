@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  # ── Knowledge App backend + frontend ──────────────────────────────────────
+  knowledge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist uploads and database between container restarts
+      - knowledge_uploads:/app/backend/uploads
+      - knowledge_data:/app/backend/data
+      # Hot-reload config without rebuilding the image
+      - ./config.yaml:/app/config.yaml:ro
+    environment:
+      KNOWLEDGE_CONFIG: /app/config.yaml
+    restart: unless-stopped
+    # The app talks to Ollama running on the Docker host.
+    # On Linux use host.docker.internal (requires Docker ≥ 20.10 with --add-host).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ── Optional: Ollama sidecar (remove if you run Ollama directly on host) ──
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_models:/root/.ollama
+  #   restart: unless-stopped
+
+volumes:
+  knowledge_uploads:
+  knowledge_data:
+  # ollama_models:
