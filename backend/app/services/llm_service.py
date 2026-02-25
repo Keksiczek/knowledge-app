@@ -144,7 +144,7 @@ def generate(prompt: str, backend: str = None, model: str = None, **kwargs: Any)
 # Prompt templates
 # ──────────────────────────────────────────────────────────────────────────────
 
-def build_summary_prompt(text: str, style: str = "paragraph") -> str:
+def build_summary_prompt(text: str, style: str = "paragraph", language: str = "en") -> str:
     styles = {
         "paragraph": "Write a concise 3–5 paragraph executive summary of the following document.",
         "bullets":   "Summarize the following document as 7–10 bullet points. Be specific.",
@@ -154,6 +154,7 @@ def build_summary_prompt(text: str, style: str = "paragraph") -> str:
         ),
     }
     instruction = styles.get(style, styles["paragraph"])
+    lang_instruction = "\nRespond entirely in Czech (čeština)." if language == "cs" else ""
     return f"""{instruction}
 
 DOCUMENT:
@@ -161,10 +162,11 @@ DOCUMENT:
 {text}
 \"\"\"
 
-SUMMARY:"""
+SUMMARY:{lang_instruction}"""
 
 
-def build_highlights_prompt(text: str) -> str:
+def build_highlights_prompt(text: str, language: str = "en") -> str:
+    lang_instruction = "\nRespond entirely in Czech (čeština)." if language == "cs" else ""
     return f"""Analyze the following document and extract:
 1. The 5 most important key concepts (as a numbered list).
 2. The 5 most significant key sentences verbatim from the text (as a numbered list).
@@ -175,11 +177,12 @@ DOCUMENT:
 {text}
 \"\"\"
 
-Respond in valid JSON with keys: "key_concepts", "key_sentences", "topics".
+Respond in valid JSON with keys: "key_concepts", "key_sentences", "topics".{lang_instruction}
 JSON:"""
 
 
-def build_presentation_prompt(text: str) -> str:
+def build_presentation_prompt(text: str, language: str = "en") -> str:
+    lang_instruction = "\nRespond entirely in Czech (čeština)." if language == "cs" else ""
     return f"""Create a structured presentation outline from the following document.
 Return a JSON object with:
 - "title": the presentation title
@@ -188,7 +191,7 @@ Return a JSON object with:
     - "bullets": list of 3–5 bullet points
     - "notes": optional speaker notes (1–2 sentences)
 
-Aim for 6–10 slides total.
+Aim for 6–10 slides total.{lang_instruction}
 
 DOCUMENT:
 \"\"\"

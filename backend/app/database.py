@@ -100,13 +100,16 @@ def init_db() -> None:
 # Helper functions
 # ──────────────────────────────────────────────────────────────────────────────
 
-def cache_key(document_id: str, task: str, extra: str = "") -> str:
-    raw = f"{document_id}:{task}:{extra}"
+def cache_key(document_id: str, task: str, extra: str = "", model: str = "") -> str:
+    if not model:
+        from .config import get_settings
+        model = get_settings().llm.ollama.model
+    raw = f"{document_id}:{task}:{model}:{extra}"
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def get_cached_result(doc_id: str, task: str, extra: str = "") -> Optional[dict]:
-    key = cache_key(doc_id, task, extra)
+def get_cached_result(doc_id: str, task: str, extra: str = "", model: str = "") -> Optional[dict]:
+    key = cache_key(doc_id, task, extra, model)
     with get_db() as conn:
         row = conn.execute(
             "SELECT result FROM llm_cache WHERE cache_key = ?", (key,)
@@ -116,8 +119,8 @@ def get_cached_result(doc_id: str, task: str, extra: str = "") -> Optional[dict]
     return None
 
 
-def save_cached_result(doc_id: str, task: str, result: dict, extra: str = "") -> None:
-    key = cache_key(doc_id, task, extra)
+def save_cached_result(doc_id: str, task: str, result: dict, extra: str = "", model: str = "") -> None:
+    key = cache_key(doc_id, task, extra, model)
     prompt_hash = hashlib.md5(extra.encode()).hexdigest()
     with get_db() as conn:
         conn.execute(
