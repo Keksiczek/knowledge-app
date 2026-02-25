@@ -20,6 +20,7 @@
   <nav>
     <button class="nav-btn active" data-view="upload">Upload</button>
     <button class="nav-btn" data-view="library">Library</button>
+    <button class="nav-btn" data-view="settings">Settings</button>
   </nav>
   <div id="health-indicator" class="health-dot" title="Backend status"></div>
 </header>
@@ -57,6 +58,45 @@
     <div id="doc-list" class="doc-list">
       <p class="empty-state">No documents yet. Upload some files to get started.</p>
     </div>
+  </section>
+
+  <!-- Settings View -->
+  <section id="view-settings" class="view hidden">
+
+    <!-- Ollama Status -->
+    <div class="settings-section">
+      <h3>Status</h3>
+      <div id="ollama-status" class="status-badge">Kontroluji...</div>
+    </div>
+
+    <!-- Model Selection -->
+    <div class="settings-section">
+      <h3>Aktivní model</h3>
+      <div class="model-selector">
+        <select id="model-select"></select>
+        <button class="btn-primary" onclick="applyModel()">Použít model</button>
+        <button class="btn-secondary" onclick="refreshModels()">↻ Obnovit</button>
+      </div>
+      <div id="model-cards" class="model-grid"></div>
+    </div>
+
+    <!-- Intel Mac Info -->
+    <div class="settings-section settings-info">
+      <h3>Doporučené modely pro Intel Mac</h3>
+      <table class="model-table">
+        <tr><td><strong>qwen2.5:latest</strong></td><td>7B</td><td>Výchozí, skvělý na češtinu i angličtinu</td></tr>
+        <tr><td><strong>phi3:latest</strong></td><td>3.8B</td><td>Nejrychlejší, vhodný pro 8GB RAM</td></tr>
+        <tr><td><strong>mistral:latest</strong></td><td>7B</td><td>Dobrý na strukturovaný JSON výstup</td></tr>
+        <tr><td><strong>llama3.2:3b</strong></td><td>3B</td><td>Rychlý, odlehčený</td></tr>
+      </table>
+      <p class="info-note">
+        ⚠️ Intel Mac běží Ollama na CPU (bez GPU akcelerace).<br>
+        Modely nad 7B parametrů budou velmi pomalé. Doporučujeme max 7B.<br>
+        Očekávej 3–10 sekund na odpověď podle délky dokumentu.
+      </p>
+      <p class="info-note">Stažení modelu: <code>ollama pull &lt;model&gt;</code></p>
+    </div>
+
   </section>
 
   <!-- Analysis Panel (shown alongside library when a doc is selected) -->

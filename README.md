@@ -234,6 +234,49 @@ The caching layer (`database.py`) works for any task name automatically.
 
 ---
 
+## Nastavení pro Intel Mac
+
+Intel Mac spouští Ollama na CPU (bez GPU akcelerace). Doporučujeme modely do 7B parametrů.
+
+### Doporučené modely
+
+| Model | Velikost | Poznámka |
+|-------|----------|----------|
+| qwen2.5:latest | 7B | Výchozí, výborný na češtinu i angličtinu |
+| phi3:latest | 3.8B | Nejrychlejší, vhodný pro Mac s 8GB RAM |
+| mistral:latest | 7B | Dobrý na strukturovaný výstup |
+| llama3.2:3b | 3B | Odlehčený, rychlejší inference |
+
+### Nedoporučujeme na Intel Mac
+
+- Modely 13B+ (příliš pomalé bez GPU)
+- qwen2.5:14b, llama3.1:70b, gemma2:27b
+
+### Stažení modelu
+
+```bash
+ollama pull qwen2.5:latest
+```
+
+### Přepínání modelů za běhu
+
+Modely lze přepínat přímo v UI (záložka **Settings**) bez restartu serveru.
+Alternativně přes API:
+
+```bash
+curl -X POST http://localhost:8000/api/models/switch \
+  -H "Content-Type: application/json" \
+  -d '{"model": "phi3:latest"}'
+```
+
+### Očekávaná rychlost na Intel Mac (CPU)
+
+- Krátký dokument (< 2 stránky): 3–5 sekund
+- Střední dokument (5–10 stránek): 10–30 sekund
+- Dlouhý dokument (20+ stránek): 60–180 sekund
+
+---
+
 ## License
 
 MIT

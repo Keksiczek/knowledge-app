@@ -81,6 +81,7 @@ function showView(name) {
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('hidden', !v.id.endsWith(name)));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === name));
   if (name === 'library') loadLibrary();
+  if (name === 'settings') { loadOllamaStatus(); refreshModels(); }
 }
 
 document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -434,6 +435,84 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// ── Settings ──────────────────────────────────────────────────────────────────
+async function loadOllamaStatus() {
+  const badge = $('ollama-status');
+  if (!badge) return;
+  try {
+    const data = await apiJSON('/api/models/status');
+    if (data.ollama_running) {
+      badge.className = 'status-badge online';
+      badge.textContent = `Online — ${data.current_model} (${data.current_backend})`;
+    } else {
+      badge.className = 'status-badge offline';
+      badge.textContent = 'Offline — Ollama neběží';
+    }
+  } catch {
+    badge.className = 'status-badge offline';
+    badge.textContent = 'Offline — Backend nedostupný';
+  }
+}
+
+async function refreshModels() {
+  const select = $('model-select');
+  const grid = $('model-cards');
+  if (!select || !grid) return;
+  try {
+    const data = await apiJSON('/api/models/available');
+    const current = data.current_model;
+
+    // Populate select
+    select.innerHTML = '';
+    data.available.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.name;
+      opt.textContent = m.name;
+      if (m.name === current) opt.selected = true;
+      select.appendChild(opt);
+    });
+
+    // Render model cards
+    grid.innerHTML = '';
+    data.available.forEach(m => {
+      const card = document.createElement('div');
+      card.className = 'model-card' + (m.name === current ? ' active' : '');
+      card.innerHTML = `
+        <div class="model-card-name">${escapeHtml(m.name)}</div>
+        <div class="model-card-meta">${m.family} · ${m.size_mb ? m.size_mb + ' MB' : 'N/A'}</div>`;
+      card.addEventListener('click', () => {
+        select.value = m.name;
+        grid.querySelectorAll('.model-card').forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+      });
+      grid.appendChild(card);
+    });
+  } catch (err) {
+    grid.innerHTML = `<p class="empty-state">Nepodařilo se načíst modely: ${escapeHtml(err.message)}</p>`;
+  }
+}
+
+async function applyModel() {
+  const select = $('model-select');
+  if (!select) return;
+  const model = select.value;
+  if (!model) return;
+  try {
+    const data = await apiJSON('/api/models/switch', {
+      method: 'POST',
+      body: JSON.stringify({ model }),
+    });
+    showToast(data.message || `Model přepnut na ${model}`, 'success');
+    await refreshModels();
+    await loadOllamaStatus();
+  } catch (err) {
+    showToast(`Chyba při přepínání modelu: ${err.message}`, 'error');
+  }
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 checkHealth();
 setInterval(checkHealth, 30000);
+loadOllamaStatus();
+refreshModels();
+setInterval(loadOllamaStatus, 30000);

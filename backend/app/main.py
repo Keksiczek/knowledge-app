@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .database import init_db
-from .routers import ask, highlights, presentation, summarize, upload
+from .routers import ask, highlights, models, presentation, summarize, upload
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Logging
@@ -90,6 +90,7 @@ app.include_router(summarize.router)
 app.include_router(highlights.router)
 app.include_router(presentation.router)
 app.include_router(ask.router)
+app.include_router(models.router)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Health check

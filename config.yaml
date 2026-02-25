@@ -8,8 +8,8 @@ llm:
   # Ollama settings
   ollama:
     base_url: "http://localhost:11434"
-    model: "llama3.2"          # or mistral, phi3, gemma2, etc.
-    timeout: 120               # seconds
+    model: "qwen2.5:latest"    # optimální pro Intel Mac (7B, CPU inference)
+    timeout: 180               # zvýšeno na 180s (CPU je pomalejší)
 
   # LM Studio settings (OpenAI-compatible endpoint)
   lmstudio:

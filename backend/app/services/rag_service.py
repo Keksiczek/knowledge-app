@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # Chunking
 # ──────────────────────────────────────────────────────────────────────────────
 
-def split_text(text: str, chunk_size: int, overlap: int) -> list[str]:
+def split_text_chars(text: str, chunk_size: int, overlap: int) -> list[str]:
     """Split *text* into overlapping character-level chunks."""
     if not text:
         return []
@@ -37,6 +37,39 @@ def split_text(text: str, chunk_size: int, overlap: int) -> list[str]:
             break
         start += chunk_size - overlap
     return chunks
+
+
+def split_text(text: str, chunk_size: int, overlap: int) -> list[str]:
+    """Split *text* into chunks that respect sentence boundaries."""
+    import re
+    if not text:
+        return []
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    chunks = []
+    current_chunk: list[str] = []
+    current_len = 0
+
+    for sentence in sentences:
+        sentence_len = len(sentence)
+        if current_len + sentence_len > chunk_size and current_chunk:
+            chunks.append(' '.join(current_chunk))
+            overlap_chunk: list[str] = []
+            overlap_len = 0
+            for s in reversed(current_chunk):
+                if overlap_len + len(s) <= overlap:
+                    overlap_chunk.insert(0, s)
+                    overlap_len += len(s)
+                else:
+                    break
+            current_chunk = overlap_chunk
+            current_len = overlap_len
+        current_chunk.append(sentence)
+        current_len += sentence_len
+
+    if current_chunk:
+        chunks.append(' '.join(current_chunk))
+
+    return chunks if chunks else [text]
 
 
 # ──────────────────────────────────────────────────────────────────────────────
