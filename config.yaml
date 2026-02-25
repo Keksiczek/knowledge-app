@@ -1,0 +1,56 @@
+# Knowledge App – Configuration
+# Copy and adapt this file to your local setup
+
+llm:
+  # Backend type: "ollama" | "lmstudio" | "textgen"
+  backend: "ollama"
+
+  # Ollama settings
+  ollama:
+    base_url: "http://localhost:11434"
+    model: "llama3.2"          # or mistral, phi3, gemma2, etc.
+    timeout: 120               # seconds
+
+  # LM Studio settings (OpenAI-compatible endpoint)
+  lmstudio:
+    base_url: "http://localhost:1234/v1"
+    model: "local-model"
+    timeout: 120
+
+  # text-generation-webui settings
+  textgen:
+    base_url: "http://localhost:5000"
+    model: ""
+    timeout: 120
+
+  # Generation parameters
+  generation:
+    temperature: 0.2
+    max_tokens: 4096
+    top_p: 0.9
+
+database:
+  # "sqlite" or "duckdb"
+  engine: "sqlite"
+  path: "./data/knowledge.db"   # relative to backend/
+
+storage:
+  upload_dir: "./uploads"        # where raw uploaded files are stored
+  max_file_size_mb: 50
+
+rag:
+  # Chunk size for splitting documents before embedding/retrieval
+  chunk_size: 512
+  chunk_overlap: 64
+  # Number of top chunks to retrieve for Q&A
+  top_k: 5
+  # Embedding model (local via sentence-transformers)
+  embedding_model: "all-MiniLM-L6-v2"
+
+app:
+  host: "0.0.0.0"
+  port: 8000
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8080"
+    - "http://127.0.0.1:8080"
