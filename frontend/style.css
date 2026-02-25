@@ -372,6 +372,18 @@ main {
 }
 .btn-secondary:hover { background: var(--border); }
 
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+.export-bar {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 /* ── Toast ───────────────────────────────────────────────────────────────── */
 #toast-container {
   position: fixed;

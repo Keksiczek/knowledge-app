@@ -2,7 +2,7 @@
 highlights.py – /api/highlights endpoint.
 
 POST /api/highlights
-Body: { "document_id": "..." }
+Body: { "document_id": "...", "language": "en|cs" }
 
 Returns key concepts, key sentences, and main topics extracted by the LLM.
 """
@@ -13,7 +13,7 @@ import logging
 import re
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .. import database as db
 from ..services import llm_service
@@ -21,9 +21,12 @@ from ..services import llm_service
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["highlights"])
 
+MAX_CHARS = 24000  # ~6000 tokens, safe reserve for prompt + response
+
 
 class HighlightsRequest(BaseModel):
     document_id: str
+    language: str = Field("en", pattern="^(en|cs)$")
 
 
 def _parse_json_response(raw: str) -> dict:
@@ -53,7 +56,8 @@ async def highlights(req: HighlightsRequest):
             detail=f"Document is not ready yet (status: {doc['status']})",
         )
 
-    cached = db.get_cached_result(req.document_id, "highlights")
+    cache_extra = req.language
+    cached = db.get_cached_result(req.document_id, "highlights", cache_extra)
     if cached:
         return {**cached, "cached": True}
 
@@ -61,7 +65,16 @@ async def highlights(req: HighlightsRequest):
     if not text:
         raise HTTPException(status_code=422, detail="No text extracted from document")
 
-    prompt = llm_service.build_highlights_prompt(text)
+    # Truncation protection against context window overflow
+    truncated = False
+    original_len = len(text)
+    if len(text) > MAX_CHARS:
+        half = MAX_CHARS // 2
+        text = text[:half] + "\n\n[... střed dokumentu zkrácen ...]\n\n" + text[-half:]
+        truncated = True
+        logger.warning("Document truncated for LLM: doc_id=%s, original_len=%d", req.document_id, original_len)
+
+    prompt = llm_service.build_highlights_prompt(text, req.language)
     raw = llm_service.generate(prompt)
     parsed = _parse_json_response(raw)
 
@@ -70,7 +83,8 @@ async def highlights(req: HighlightsRequest):
         "key_concepts": parsed.get("key_concepts", []),
         "key_sentences": parsed.get("key_sentences", []),
         "topics": parsed.get("topics", []),
+        "truncated": truncated,
         "cached": False,
     }
-    db.save_cached_result(req.document_id, "highlights", result)
+    db.save_cached_result(req.document_id, "highlights", result, cache_extra)
     return result

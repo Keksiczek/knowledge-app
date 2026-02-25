@@ -160,7 +160,17 @@ async function uploadFile(file) {
 
 function pollDocumentStatus(docId) {
   if (pollingTimers[docId]) return;
+  const MAX_POLLS = 60; // 2 minutes (60 × 2s)
+  let pollCount = 0;
   const interval = setInterval(async () => {
+    pollCount++;
+    if (pollCount > MAX_POLLS) {
+      clearInterval(interval);
+      delete pollingTimers[docId];
+      updateQueueItem(docId, 'error');
+      showToast('Zpracování trvá příliš dlouho – zkus znovu', 'error');
+      return;
+    }
     try {
       const doc = await apiJSON(`/api/documents/${docId}`);
       updateQueueItem(docId, doc.status);
@@ -208,8 +218,28 @@ function renderDocList(docs) {
         <div class="doc-name">${escapeHtml(doc.original_name)}</div>
         <div class="doc-meta">${tokens}${formatBytes(doc.file_size)} · ${formatDate(doc.uploaded_at)}</div>
       </div>
-      <span class="status-badge doc-badge ${doc.status}">${doc.status}</span>`;
-    card.addEventListener('click', () => selectDocument(doc));
+      <span class="status-badge doc-badge ${doc.status}">${doc.status}</span>
+      <button class="icon-btn delete-doc-btn" title="Smazat dokument">&#x1F5D1;</button>`;
+    card.addEventListener('click', e => {
+      if (e.target.closest('.delete-doc-btn')) return;
+      selectDocument(doc);
+    });
+    const delBtn = card.querySelector('.delete-doc-btn');
+    delBtn.addEventListener('click', async e => {
+      e.stopPropagation();
+      if (!confirm(`Smazat "${doc.original_name}"? Tuto akci nelze vrátit.`)) return;
+      try {
+        await apiFetch(`/api/documents/${doc.id}`, { method: 'DELETE' });
+        card.remove();
+        if (selectedDocId === doc.id) {
+          $('analysis-panel').classList.add('hidden');
+          selectedDocId = null;
+        }
+        showToast('Dokument smazán', 'success');
+      } catch (err) {
+        showToast(`Chyba při mazání: ${err.message}`, 'error');
+      }
+    });
     list.appendChild(card);
   });
 }
@@ -254,16 +284,24 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 $('btn-summarize').addEventListener('click', async () => {
   if (!selectedDocId) return;
   const style = $('summary-style').value;
+  const language = $('output-language') ? $('output-language').value : 'en';
   const out = $('summary-output');
   setLoading(out, 'Generating summary…');
   disableBtn('btn-summarize', true);
   try {
     const data = await apiJSON('/api/summarize', {
       method: 'POST',
-      body: JSON.stringify({ document_id: selectedDocId, style }),
+      body: JSON.stringify({ document_id: selectedDocId, style, language }),
     });
-    out.textContent = data.summary;
+    out.innerHTML = '';
+    const pre = document.createElement('div');
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.textContent = data.summary;
+    out.appendChild(pre);
     if (data.cached) showToast('Loaded from cache', 'info', 2000);
+    if (data.truncated) showToast('Dokument byl zkrácen pro zpracování (příliš dlouhý pro model)', 'info');
+    const docName = $('panel-doc-name').textContent.replace(/\.[^.]+$/, '');
+    addExportButtons(out, data.summary, `${docName}_summary.txt`);
   } catch (err) {
     out.textContent = '';
     showToast(`Summary error: ${err.message}`, 'error');
@@ -275,16 +313,21 @@ $('btn-summarize').addEventListener('click', async () => {
 // ── Highlights ────────────────────────────────────────────────────────────────
 $('btn-highlights').addEventListener('click', async () => {
   if (!selectedDocId) return;
+  const language = $('output-language') ? $('output-language').value : 'en';
   const out = $('highlights-output');
   setLoading(out, 'Extracting highlights…');
   disableBtn('btn-highlights', true);
   try {
     const data = await apiJSON('/api/highlights', {
       method: 'POST',
-      body: JSON.stringify({ document_id: selectedDocId }),
+      body: JSON.stringify({ document_id: selectedDocId, language }),
     });
     renderHighlights(out, data);
     if (data.cached) showToast('Loaded from cache', 'info', 2000);
+    if (data.truncated) showToast('Dokument byl zkrácen pro zpracování (příliš dlouhý pro model)', 'info');
+    const docName = $('panel-doc-name').textContent.replace(/\.[^.]+$/, '');
+    const exportText = highlightsToText(data);
+    addExportButtons(out, exportText, `${docName}_highlights.txt`);
   } catch (err) {
     out.innerHTML = '';
     showToast(`Highlights error: ${err.message}`, 'error');
@@ -326,6 +369,7 @@ function renderHighlights(container, data) {
 $('btn-presentation').addEventListener('click', async () => {
   if (!selectedDocId) return;
   const format = $('presentation-format').value;
+  const language = $('output-language') ? $('output-language').value : 'en';
   const out = $('presentation-output');
 
   if (format === 'pptx') {
@@ -334,7 +378,7 @@ $('btn-presentation').addEventListener('click', async () => {
     try {
       const res = await apiFetch('/api/presentation', {
         method: 'POST',
-        body: JSON.stringify({ document_id: selectedDocId, format: 'pptx' }),
+        body: JSON.stringify({ document_id: selectedDocId, format: 'pptx', language }),
       });
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -362,10 +406,11 @@ $('btn-presentation').addEventListener('click', async () => {
   try {
     const data = await apiJSON('/api/presentation', {
       method: 'POST',
-      body: JSON.stringify({ document_id: selectedDocId, format: 'markdown' }),
+      body: JSON.stringify({ document_id: selectedDocId, format: 'markdown', language }),
     });
     out.textContent = data.markdown;
     if (data.cached) showToast('Loaded from cache', 'info', 2000);
+    if (data.truncated) showToast('Dokument byl zkrácen pro zpracování (příliš dlouhý pro model)', 'info');
   } catch (err) {
     out.textContent = '';
     showToast(`Presentation error: ${err.message}`, 'error');
@@ -417,6 +462,53 @@ async function submitQuestion() {
     input.focus();
     history.scrollTop = history.scrollHeight;
   }
+}
+
+// ── Export helpers ────────────────────────────────────────────────────────────
+function addExportButtons(container, text, filename) {
+  const bar = document.createElement('div');
+  bar.className = 'export-bar';
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'btn-secondary btn-sm';
+  copyBtn.textContent = '📋 Kopírovat';
+  copyBtn.onclick = () => {
+    navigator.clipboard.writeText(text);
+    showToast('Zkopírováno do schránky', 'success', 2000);
+  };
+  const dlBtn = document.createElement('button');
+  dlBtn.className = 'btn-secondary btn-sm';
+  dlBtn.textContent = '⬇ Stáhnout';
+  dlBtn.onclick = () => {
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  bar.appendChild(copyBtn);
+  bar.appendChild(dlBtn);
+  container.appendChild(bar);
+}
+
+function highlightsToText(data) {
+  const lines = [];
+  if (data.key_concepts && data.key_concepts.length) {
+    lines.push('Key Concepts:');
+    data.key_concepts.forEach((c, i) => lines.push(`${i + 1}. ${c}`));
+    lines.push('');
+  }
+  if (data.key_sentences && data.key_sentences.length) {
+    lines.push('Key Sentences:');
+    data.key_sentences.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
+    lines.push('');
+  }
+  if (data.topics) {
+    const topicList = Array.isArray(data.topics) ? data.topics.join(', ') : data.topics;
+    lines.push(`Topics: ${topicList}`);
+  }
+  return lines.join('\n');
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

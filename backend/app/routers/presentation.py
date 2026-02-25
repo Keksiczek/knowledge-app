@@ -2,7 +2,7 @@
 presentation.py – /api/presentation endpoint.
 
 POST /api/presentation
-Body: { "document_id": "...", "format": "markdown|pptx" }
+Body: { "document_id": "...", "format": "markdown|pptx", "language": "en|cs" }
 
 Returns a Markdown outline or triggers PPTX generation (returned as binary).
 """
@@ -24,10 +24,13 @@ from ..services import llm_service
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["presentation"])
 
+MAX_CHARS = 24000  # ~6000 tokens, safe reserve for prompt + response
+
 
 class PresentationRequest(BaseModel):
     document_id: str
     format: str = Field("markdown", pattern="^(markdown|pptx)$")
+    language: str = Field("en", pattern="^(en|cs)$")
 
 
 def _parse_presentation_json(raw: str) -> dict:
@@ -119,8 +122,9 @@ async def presentation(req: PresentationRequest):
             detail=f"Document is not ready yet (status: {doc['status']})",
         )
 
-    # Cache key includes format
-    cached = db.get_cached_result(req.document_id, "presentation", req.format)
+    # Cache key includes format and language
+    cache_extra = f"{req.format}:{req.language}"
+    cached = db.get_cached_result(req.document_id, "presentation", cache_extra)
     if cached and req.format == "markdown":
         return {**cached, "cached": True}
 
@@ -128,19 +132,30 @@ async def presentation(req: PresentationRequest):
     if not text:
         raise HTTPException(status_code=422, detail="No text extracted from document")
 
+    truncated = False
     if not cached:
-        prompt = llm_service.build_presentation_prompt(text)
+        # Truncation protection against context window overflow
+        original_len = len(text)
+        if len(text) > MAX_CHARS:
+            half = MAX_CHARS // 2
+            text = text[:half] + "\n\n[... střed dokumentu zkrácen ...]\n\n" + text[-half:]
+            truncated = True
+            logger.warning("Document truncated for LLM: doc_id=%s, original_len=%d", req.document_id, original_len)
+
+        prompt = llm_service.build_presentation_prompt(text, req.language)
         raw = llm_service.generate(prompt)
         outline = _parse_presentation_json(raw)
         result = {
             "document_id": req.document_id,
             "format": req.format,
             "outline": outline,
+            "truncated": truncated,
             "cached": False,
         }
-        db.save_cached_result(req.document_id, "presentation", result, req.format)
+        db.save_cached_result(req.document_id, "presentation", result, cache_extra)
     else:
         outline = cached.get("outline", {})
+        truncated = cached.get("truncated", False)
 
     if req.format == "markdown":
         md = _outline_to_markdown(outline)
@@ -149,6 +164,7 @@ async def presentation(req: PresentationRequest):
             "format": "markdown",
             "markdown": md,
             "outline": outline,
+            "truncated": truncated,
             "cached": bool(cached),
         })
 
