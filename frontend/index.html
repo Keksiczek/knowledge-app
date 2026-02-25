@@ -50,13 +50,85 @@
   </section>
 
   <!-- Library View -->
-  <section id="view-library" class="view hidden">
-    <div class="library-toolbar">
-      <h2>Document Library</h2>
-      <button class="btn-secondary" id="refresh-btn">Refresh</button>
+  <section id="view-library" class="view hidden library-layout">
+    <div class="doc-list-column">
+      <div class="library-toolbar">
+        <h2>Document Library</h2>
+        <input
+          type="search"
+          id="doc-search"
+          placeholder="Hledat dokumenty…"
+          class="doc-search-input"
+        />
+        <button class="btn-secondary" id="refresh-btn">Refresh</button>
+      </div>
+      <div id="doc-list" class="doc-list">
+        <p class="empty-state">No documents yet. Upload some files to get started.</p>
+      </div>
     </div>
-    <div id="doc-list" class="doc-list">
-      <p class="empty-state">No documents yet. Upload some files to get started.</p>
+    <div class="panel-column">
+      <!-- Analysis Panel (shown alongside library when a doc is selected) -->
+      <aside id="analysis-panel" class="analysis-panel hidden">
+        <div class="panel-header">
+          <h3 id="panel-doc-name">Document</h3>
+          <button id="panel-close" class="icon-btn" title="Close">&#x2715;</button>
+        </div>
+
+        <div class="panel-tabs">
+          <button class="tab-btn active" data-tab="summary">Summary</button>
+          <button class="tab-btn" data-tab="highlights">Highlights</button>
+          <button class="tab-btn" data-tab="presentation">Presentation</button>
+          <button class="tab-btn" data-tab="ask">Ask</button>
+        </div>
+
+        <!-- Summary Tab -->
+        <div class="tab-content active" id="tab-summary">
+          <div class="style-selector">
+            <label>Style:</label>
+            <select id="summary-style">
+              <option value="paragraph">Paragraph</option>
+              <option value="bullets">Bullet Points</option>
+              <option value="executive">Executive</option>
+            </select>
+            <label>Language:</label>
+            <select id="output-language">
+              <option value="en">English</option>
+              <option value="cs">Čeština</option>
+            </select>
+            <button class="btn-primary" id="btn-summarize">Generate</button>
+          </div>
+          <div id="summary-output" class="output-box"></div>
+        </div>
+
+        <!-- Highlights Tab -->
+        <div class="tab-content hidden" id="tab-highlights">
+          <button class="btn-primary" id="btn-highlights">Extract Highlights</button>
+          <div id="highlights-output" class="output-box"></div>
+        </div>
+
+        <!-- Presentation Tab -->
+        <div class="tab-content hidden" id="tab-presentation">
+          <div class="style-selector">
+            <label>Format:</label>
+            <select id="presentation-format">
+              <option value="markdown">Markdown outline</option>
+              <option value="pptx">Download PPTX</option>
+            </select>
+            <button class="btn-primary" id="btn-presentation">Generate</button>
+          </div>
+          <div id="presentation-output" class="output-box"></div>
+        </div>
+
+        <!-- Ask Tab -->
+        <div class="tab-content hidden" id="tab-ask">
+          <div class="ask-input-row">
+            <input type="text" id="ask-input" placeholder="Ask a question about this document…" />
+            <button class="btn-primary" id="btn-ask">Ask</button>
+          </div>
+          <div id="ask-history" class="ask-history"></div>
+        </div>
+
+      </aside>
     </div>
   </section>
 
@@ -98,69 +170,6 @@
     </div>
 
   </section>
-
-  <!-- Analysis Panel (shown alongside library when a doc is selected) -->
-  <aside id="analysis-panel" class="analysis-panel hidden">
-    <div class="panel-header">
-      <h3 id="panel-doc-name">Document</h3>
-      <button id="panel-close" class="icon-btn" title="Close">&#x2715;</button>
-    </div>
-
-    <div class="panel-tabs">
-      <button class="tab-btn active" data-tab="summary">Summary</button>
-      <button class="tab-btn" data-tab="highlights">Highlights</button>
-      <button class="tab-btn" data-tab="presentation">Presentation</button>
-      <button class="tab-btn" data-tab="ask">Ask</button>
-    </div>
-
-    <!-- Summary Tab -->
-    <div class="tab-content active" id="tab-summary">
-      <div class="style-selector">
-        <label>Style:</label>
-        <select id="summary-style">
-          <option value="paragraph">Paragraph</option>
-          <option value="bullets">Bullet Points</option>
-          <option value="executive">Executive</option>
-        </select>
-        <label>Language:</label>
-        <select id="output-language">
-          <option value="en">English</option>
-          <option value="cs">Čeština</option>
-        </select>
-        <button class="btn-primary" id="btn-summarize">Generate</button>
-      </div>
-      <div id="summary-output" class="output-box"></div>
-    </div>
-
-    <!-- Highlights Tab -->
-    <div class="tab-content hidden" id="tab-highlights">
-      <button class="btn-primary" id="btn-highlights">Extract Highlights</button>
-      <div id="highlights-output" class="output-box"></div>
-    </div>
-
-    <!-- Presentation Tab -->
-    <div class="tab-content hidden" id="tab-presentation">
-      <div class="style-selector">
-        <label>Format:</label>
-        <select id="presentation-format">
-          <option value="markdown">Markdown outline</option>
-          <option value="pptx">Download PPTX</option>
-        </select>
-        <button class="btn-primary" id="btn-presentation">Generate</button>
-      </div>
-      <div id="presentation-output" class="output-box"></div>
-    </div>
-
-    <!-- Ask Tab -->
-    <div class="tab-content hidden" id="tab-ask">
-      <div class="ask-input-row">
-        <input type="text" id="ask-input" placeholder="Ask a question about this document…" />
-        <button class="btn-primary" id="btn-ask">Ask</button>
-      </div>
-      <div id="ask-history" class="ask-history"></div>
-    </div>
-
-  </aside>
 
 </main>
 

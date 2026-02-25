@@ -14,6 +14,8 @@ const API = '';  // empty = same origin; change to 'http://localhost:8000' for d
 // ── State ────────────────────────────────────────────────────────────────────
 let selectedDocId = null;
 let pollingTimers = {};
+let allDocs = [];
+let _loadingTimer = null;
 
 // ── Utility helpers ──────────────────────────────────────────────────────────
 
@@ -194,7 +196,8 @@ async function loadLibrary() {
   list.innerHTML = '<p class="empty-state">Loading…</p>';
   try {
     const data = await apiJSON('/api/documents');
-    renderDocList(data.documents);
+    allDocs = data.documents;
+    renderDocList(allDocs);
   } catch (err) {
     list.innerHTML = `<p class="empty-state">Error loading documents: ${escapeHtml(err.message)}</p>`;
   }
@@ -203,7 +206,12 @@ async function loadLibrary() {
 function renderDocList(docs) {
   const list = $('doc-list');
   if (!docs.length) {
-    list.innerHTML = '<p class="empty-state">No documents yet. Upload some files to get started.</p>';
+    const q = $('doc-search') ? $('doc-search').value.trim() : '';
+    if (q) {
+      list.innerHTML = '<p class="empty-state">Žádné dokumenty neodpovídají hledání.</p>';
+    } else {
+      list.innerHTML = '<p class="empty-state">No documents yet. Upload some files to get started.</p>';
+    }
     return;
   }
   list.innerHTML = '';
@@ -231,6 +239,7 @@ function renderDocList(docs) {
       try {
         await apiFetch(`/api/documents/${doc.id}`, { method: 'DELETE' });
         card.remove();
+        allDocs = allDocs.filter(d => d.id !== doc.id);
         if (selectedDocId === doc.id) {
           $('analysis-panel').classList.add('hidden');
           selectedDocId = null;
@@ -253,6 +262,7 @@ function selectDocument(doc) {
   document.querySelectorAll('.doc-card').forEach(c => c.classList.toggle('selected', c.dataset.id === doc.id));
 
   $('panel-doc-name').textContent = doc.original_name;
+  $('view-library').classList.add('library-layout');
   $('analysis-panel').classList.remove('hidden');
 
   // Reset outputs
@@ -261,6 +271,19 @@ function selectDocument(doc) {
 }
 
 $('refresh-btn').addEventListener('click', loadLibrary);
+
+$('doc-search').addEventListener('input', () => {
+  const q = $('doc-search').value.trim().toLowerCase();
+  if (!q) {
+    renderDocList(allDocs);
+    return;
+  }
+  const filtered = allDocs.filter(d =>
+    d.original_name.toLowerCase().includes(q) ||
+    d.file_format.toLowerCase().includes(q)
+  );
+  renderDocList(filtered);
+});
 
 $('panel-close').addEventListener('click', () => {
   $('analysis-panel').classList.add('hidden');
@@ -306,6 +329,7 @@ $('btn-summarize').addEventListener('click', async () => {
     out.textContent = '';
     showToast(`Summary error: ${err.message}`, 'error');
   } finally {
+    if (_loadingTimer) { clearInterval(_loadingTimer); _loadingTimer = null; }
     disableBtn('btn-summarize', false);
   }
 });
@@ -332,6 +356,7 @@ $('btn-highlights').addEventListener('click', async () => {
     out.innerHTML = '';
     showToast(`Highlights error: ${err.message}`, 'error');
   } finally {
+    if (_loadingTimer) { clearInterval(_loadingTimer); _loadingTimer = null; }
     disableBtn('btn-highlights', false);
   }
 });
@@ -395,6 +420,7 @@ $('btn-presentation').addEventListener('click', async () => {
       out.textContent = '';
       showToast(`Presentation error: ${err.message}`, 'error');
     } finally {
+      if (_loadingTimer) { clearInterval(_loadingTimer); _loadingTimer = null; }
       disableBtn('btn-presentation', false);
     }
     return;
@@ -415,6 +441,7 @@ $('btn-presentation').addEventListener('click', async () => {
     out.textContent = '';
     showToast(`Presentation error: ${err.message}`, 'error');
   } finally {
+    if (_loadingTimer) { clearInterval(_loadingTimer); _loadingTimer = null; }
     disableBtn('btn-presentation', false);
   }
 });
@@ -513,7 +540,24 @@ function highlightsToText(data) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function setLoading(el, msg) {
-  el.innerHTML = `<span class="spinner-text">${escapeHtml(msg)}</span>`;
+  if (_loadingTimer) {
+    clearInterval(_loadingTimer);
+    _loadingTimer = null;
+  }
+  let seconds = 0;
+  el.innerHTML = `
+    <div class="loading-state">
+      <div class="loading-spinner"></div>
+      <div class="loading-message">${escapeHtml(msg)}</div>
+      <div class="loading-timer" id="loading-elapsed">0s</div>
+      <div class="loading-hint">Intel Mac (CPU) – může trvat 10–30s</div>
+    </div>
+  `;
+  _loadingTimer = setInterval(() => {
+    seconds++;
+    const timerEl = $('loading-elapsed');
+    if (timerEl) timerEl.textContent = `${seconds}s`;
+  }, 1000);
 }
 
 function disableBtn(id, disabled) {
