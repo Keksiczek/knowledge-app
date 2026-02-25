@@ -105,25 +105,37 @@ _BACKENDS = {
     "textgen":   _TextGenBackend,
 }
 
-_backend_instance = None
+_backend_cache: dict = {}
 
 
-def _get_backend():
-    global _backend_instance
-    if _backend_instance is None:
-        name = get_settings().llm.backend
-        cls = _BACKENDS.get(name)
+def _get_backend(backend_name: str = None, model: str = None):
+    global _backend_cache
+    if backend_name is None:
+        backend_name = get_settings().llm.backend
+    if model is None:
+        model = get_settings().llm.ollama.model
+    cache_key = (backend_name, model)
+    if cache_key not in _backend_cache:
+        cls = _BACKENDS.get(backend_name)
         if cls is None:
-            raise ValueError(f"Unknown LLM backend: {name!r}. Choose from {list(_BACKENDS)}")
-        _backend_instance = cls()
-    return _backend_instance
+            raise ValueError(f"Unknown LLM backend: {backend_name!r}. Choose from {list(_BACKENDS)}")
+        instance = cls()
+        if hasattr(instance, 'model'):
+            instance.model = model
+        _backend_cache[cache_key] = instance
+    return _backend_cache[cache_key]
 
 
-def generate(prompt: str, **kwargs: Any) -> str:
+def reset_backend_cache():
+    global _backend_cache
+    _backend_cache = {}
+
+
+def generate(prompt: str, backend: str = None, model: str = None, **kwargs: Any) -> str:
     """Send *prompt* to the configured local LLM and return the response text."""
-    backend = _get_backend()
-    logger.debug("LLM generate | backend=%s | prompt_len=%d", type(backend).__name__, len(prompt))
-    response = backend.generate(prompt, **kwargs)
+    backend_instance = _get_backend(backend, model)
+    logger.debug("LLM generate | backend=%s | prompt_len=%d", type(backend_instance).__name__, len(prompt))
+    response = backend_instance.generate(prompt, **kwargs)
     logger.debug("LLM response length: %d chars", len(response))
     return response
 
