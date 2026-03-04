@@ -69,7 +69,7 @@ async function apiJSON(path, opts = {}) {
 async function checkHealth() {
   const dot = $('health-indicator');
   try {
-    const data = await apiJSON('/api/health');
+    const data = await apiJSON('/api/v1/health');
     dot.className = 'health-dot ok';
     dot.title = `Backend OK — ${data.llm_backend} / ${data.db_engine}`;
   } catch {
@@ -143,7 +143,7 @@ async function uploadFile(file) {
   form.append('files', file);
 
   try {
-    const res = await fetch(API + '/api/upload', { method: 'POST', body: form });
+    const res = await fetch(API + '/api/v1/upload', { method: 'POST', body: form });
     if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
     const data = await res.json();
     const doc = data.documents[0];
@@ -174,7 +174,7 @@ function pollDocumentStatus(docId) {
       return;
     }
     try {
-      const doc = await apiJSON(`/api/documents/${docId}`);
+      const doc = await apiJSON(`/api/v1/documents/${docId}`);
       updateQueueItem(docId, doc.status);
       if (doc.status === 'ready') {
         clearInterval(interval);
@@ -195,7 +195,7 @@ async function loadLibrary() {
   const list = $('doc-list');
   list.innerHTML = '<p class="empty-state">Loading…</p>';
   try {
-    const data = await apiJSON('/api/documents');
+    const data = await apiJSON('/api/v1/documents');
     allDocs = data.documents;
     renderDocList(allDocs);
   } catch (err) {
@@ -237,7 +237,7 @@ function renderDocList(docs) {
       e.stopPropagation();
       if (!confirm(`Smazat "${doc.original_name}"? Tuto akci nelze vrátit.`)) return;
       try {
-        await apiFetch(`/api/documents/${doc.id}`, { method: 'DELETE' });
+        await apiFetch(`/api/v1/documents/${doc.id}`, { method: 'DELETE' });
         card.remove();
         allDocs = allDocs.filter(d => d.id !== doc.id);
         if (selectedDocId === doc.id) {
@@ -312,7 +312,7 @@ $('btn-summarize').addEventListener('click', async () => {
   setLoading(out, 'Generating summary…');
   disableBtn('btn-summarize', true);
   try {
-    const data = await apiJSON('/api/summarize', {
+    const data = await apiJSON('/api/v1/summarize', {
       method: 'POST',
       body: JSON.stringify({ document_id: selectedDocId, style, language }),
     });
@@ -342,7 +342,7 @@ $('btn-highlights').addEventListener('click', async () => {
   setLoading(out, 'Extracting highlights…');
   disableBtn('btn-highlights', true);
   try {
-    const data = await apiJSON('/api/highlights', {
+    const data = await apiJSON('/api/v1/highlights', {
       method: 'POST',
       body: JSON.stringify({ document_id: selectedDocId, language }),
     });
@@ -401,7 +401,7 @@ $('btn-presentation').addEventListener('click', async () => {
     setLoading(out, 'Generating PPTX…');
     disableBtn('btn-presentation', true);
     try {
-      const res = await apiFetch('/api/presentation', {
+      const res = await apiFetch('/api/v1/presentation', {
         method: 'POST',
         body: JSON.stringify({ document_id: selectedDocId, format: 'pptx', language }),
       });
@@ -430,7 +430,7 @@ $('btn-presentation').addEventListener('click', async () => {
   setLoading(out, 'Generating outline…');
   disableBtn('btn-presentation', true);
   try {
-    const data = await apiJSON('/api/presentation', {
+    const data = await apiJSON('/api/v1/presentation', {
       method: 'POST',
       body: JSON.stringify({ document_id: selectedDocId, format: 'markdown', language }),
     });
@@ -471,7 +471,7 @@ async function submitQuestion() {
   history.scrollTop = history.scrollHeight;
 
   try {
-    const data = await apiJSON('/api/ask', {
+    const data = await apiJSON('/api/v1/ask', {
       method: 'POST',
       body: JSON.stringify({ document_id: selectedDocId, question }),
     });
@@ -576,7 +576,7 @@ async function loadOllamaStatus() {
   const badge = $('ollama-status');
   if (!badge) return;
   try {
-    const data = await apiJSON('/api/models/status');
+    const data = await apiJSON('/api/v1/models/status');
     if (data.ollama_running) {
       badge.className = 'status-badge online';
       badge.textContent = `Online — ${data.current_model} (${data.current_backend})`;
@@ -595,7 +595,7 @@ async function refreshModels() {
   const grid = $('model-cards');
   if (!select || !grid) return;
   try {
-    const data = await apiJSON('/api/models/available');
+    const data = await apiJSON('/api/v1/models/available');
     const current = data.current_model;
 
     // Populate select
@@ -634,7 +634,7 @@ async function applyModel() {
   const model = select.value;
   if (!model) return;
   try {
-    const data = await apiJSON('/api/models/switch', {
+    const data = await apiJSON('/api/v1/models/switch', {
       method: 'POST',
       body: JSON.stringify({ model }),
     });

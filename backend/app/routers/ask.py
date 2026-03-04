@@ -19,7 +19,7 @@ from ..services import llm_service
 from ..services.rag_service import retrieve_relevant_chunks
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api", tags=["ask"])
+router = APIRouter(prefix="/api/v1", tags=["ask"])
 
 
 class AskRequest(BaseModel):

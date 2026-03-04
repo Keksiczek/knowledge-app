@@ -14,7 +14,7 @@ from ..services.llm_service import reset_backend_cache
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/models", tags=["models"])
+router = APIRouter(prefix="/api/v1/models", tags=["models"])
 
 
 class SwitchModelRequest(BaseModel):

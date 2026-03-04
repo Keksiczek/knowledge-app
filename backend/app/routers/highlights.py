@@ -19,7 +19,7 @@ from .. import database as db
 from ..services import llm_service
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api", tags=["highlights"])
+router = APIRouter(prefix="/api/v1", tags=["highlights"])
 
 MAX_CHARS = 24000  # ~6000 tokens, safe reserve for prompt + response
 

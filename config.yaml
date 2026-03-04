@@ -54,3 +54,9 @@ app:
     - "http://localhost:3000"
     - "http://localhost:8080"
     - "http://127.0.0.1:8080"
+
+security:
+  # Leave api_key empty ("") to disable authentication entirely.
+  # When set, all /api/v1/* endpoints (except /api/v1/health) require
+  # the header: X-API-Key: <your-key>
+  api_key: ""
