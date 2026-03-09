@@ -211,4 +211,11 @@ async def ingest_text(req: IngestTextRequest):
         raise HTTPException(status_code=500, detail=f"Indexing failed: {exc}")
 
     logger.info("Ingested text doc %s (%d chars / %d tokens)", doc_id, len(text), tc)
-    return {"id": doc_id, "status": "ready"}
+    return {
+        "id": doc_id,
+        "status": "ready",
+        "title": req.title,
+        "external_id": req.external_id,
+        "source": req.source,
+        "language": req.language,
+    }

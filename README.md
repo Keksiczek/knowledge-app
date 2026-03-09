@@ -180,7 +180,15 @@ POST /api/v1/ingest_text
   "language": "cs|en|auto"
 }
 
-Response 200: { "id": "...", "status": "ready" }
+Response 200:
+{
+  "id": "...",
+  "status": "ready",
+  "title": "...",
+  "external_id": "...",
+  "source": "...",
+  "language": "..."
+}
 ```
 
 ### List / get / delete documents
