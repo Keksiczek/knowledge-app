@@ -1,5 +1,5 @@
 """
-ask.py – /api/v1/ask endpoint (RAG-powered Qask.py – /api/ask endpoint (RAG-powered Q&A).A).
+ask.py – /api/v1/ask endpoint (RAG-powered Q&A).
 
 POST /api/v1/ask
 Body: { "document_id": "...", "question": "What is ...?" }
