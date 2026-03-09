@@ -58,7 +58,11 @@ CREATE TABLE IF NOT EXISTS documents (
     uploaded_at   TEXT NOT NULL,
     text_length   INTEGER DEFAULT 0,
     token_count   INTEGER DEFAULT 0,
-    status        TEXT DEFAULT 'pending'  -- pending | processing | ready | error
+    status        TEXT DEFAULT 'pending', -- pending | processing | ready | error
+    external_id   TEXT,                  -- optional external reference id
+    source        TEXT,                  -- teams | email | hub | etc.
+    tags          TEXT,                  -- comma-separated tags or JSON
+    language      TEXT                   -- cs | en | auto (document language hint)
 );
 
 -- Extracted plain-text chunks (for RAG)
@@ -164,14 +168,31 @@ def get_full_text(doc_id: str) -> str:
 
 
 def save_document(doc: dict) -> None:
+    row = {
+        "id": doc["id"],
+        "filename": doc["filename"],
+        "original_name": doc["original_name"],
+        "file_format": doc["file_format"],
+        "file_size": doc["file_size"],
+        "uploaded_at": doc["uploaded_at"],
+        "text_length": doc.get("text_length", 0),
+        "token_count": doc.get("token_count", 0),
+        "status": doc.get("status", "pending"),
+        "external_id": doc.get("external_id"),
+        "source": doc.get("source"),
+        "tags": doc.get("tags"),
+        "language": doc.get("language"),
+    }
     with get_db() as conn:
         conn.execute(
             """INSERT OR REPLACE INTO documents
                (id, filename, original_name, file_format, file_size,
-                uploaded_at, text_length, token_count, status)
+                uploaded_at, text_length, token_count, status,
+                external_id, source, tags, language)
                VALUES (:id, :filename, :original_name, :file_format, :file_size,
-                       :uploaded_at, :text_length, :token_count, :status)""",
-            doc,
+                       :uploaded_at, :text_length, :token_count, :status,
+                       :external_id, :source, :tags, :language)""",
+            row,
         )
 
 

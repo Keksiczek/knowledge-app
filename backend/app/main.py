@@ -11,15 +11,16 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
-from .database import init_db
+from .database import init_db, get_db
 from .routers import ask, highlights, models, presentation, summarize, upload
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -59,6 +60,29 @@ app.add_middleware(
 )
 
 # ──────────────────────────────────────────────────────────────────────────────
+# API key authentication middleware (optional – disabled when api_key is empty)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@app.middleware("http")
+async def api_key_middleware(request: Request, call_next):
+    api_key = settings.security.api_key
+    path = request.url.path
+    # Only guard /api/v1/ routes; health is always exempt
+    if (
+        api_key
+        and path.startswith("/api/v1/")
+        and not path.startswith("/api/v1/health")
+    ):
+        provided = request.headers.get("X-API-Key", "")
+        if provided != api_key:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Missing or invalid API key"},
+            )
+    return await call_next(request)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Request timing middleware
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -78,7 +102,25 @@ async def add_process_time_header(request: Request, call_next):
 async def startup_event():
     logger.info("Initialising database …")
     init_db()
+    _cleanup_stale_documents()
     logger.info("Knowledge App started — LLM backend: %s", settings.llm.backend)
+
+
+def _cleanup_stale_documents() -> None:
+    """Mark documents stuck in pending/processing for >1h as error on startup."""
+    cutoff = (datetime.utcnow() - timedelta(hours=1)).isoformat()
+    try:
+        with get_db() as conn:
+            cur = conn.execute(
+                """UPDATE documents SET status='error'
+                   WHERE status IN ('pending', 'processing')
+                   AND uploaded_at < ?""",
+                (cutoff,),
+            )
+        if cur.rowcount:
+            logger.warning("Startup cleanup: marked %d stale document(s) as error", cur.rowcount)
+    except Exception as exc:
+        logger.error("Startup cleanup failed: %s", exc)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -96,12 +138,34 @@ app.include_router(models.router)
 # Health check
 # ──────────────────────────────────────────────────────────────────────────────
 
-@app.get("/api/health", tags=["system"])
+@app.get("/api/v1/health", tags=["system"])
 async def health():
+    doc_count = chunk_count = storage_mb = 0
+    embeddings_enabled = False
+    try:
+        with get_db() as conn:
+            doc_count = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+            chunk_count = conn.execute("SELECT COUNT(*) FROM document_chunks").fetchone()[0]
+            size_row = conn.execute(
+                "SELECT COALESCE(SUM(file_size), 0) / 1048576.0 FROM documents"
+            ).fetchone()
+            storage_mb = round(size_row[0], 2) if size_row else 0.0
+            emb_row = conn.execute(
+                "SELECT EXISTS(SELECT 1 FROM chunk_embeddings LIMIT 1)"
+            ).fetchone()
+            embeddings_enabled = bool(emb_row[0]) if emb_row else False
+    except Exception:
+        pass
+
     return {
         "status": "ok",
         "llm_backend": settings.llm.backend,
+        "llm_model": settings.llm.ollama.model,
         "db_engine": settings.database.engine,
+        "embeddings_enabled": embeddings_enabled,
+        "documents": doc_count,
+        "chunks": chunk_count,
+        "storage_used_mb": storage_mb,
     }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -120,7 +184,7 @@ if _FRONTEND_DIR.exists():
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_frontend(full_path: str = ""):
         # Don't intercept API or docs routes
-        if full_path.startswith("api/") or full_path.startswith("static/"):
+        if full_path.startswith("api/") or full_path.startswith("static/") or full_path.startswith("api/v1/"):
             return JSONResponse(status_code=404, content={"detail": "Not found"})
         index = _FRONTEND_DIR / "index.html"
         if index.exists():

@@ -1,7 +1,7 @@
 """
-ask.py – /api/ask endpoint (RAG-powered Q&A).
+ask.py – /api/v1/ask endpoint (RAG-powered Q&A).
 
-POST /api/ask
+POST /api/v1/ask
 Body: { "document_id": "...", "question": "What is ...?" }
 
 Uses RAG: retrieves relevant chunks → builds prompt → calls LLM.
@@ -19,7 +19,7 @@ from ..services import llm_service
 from ..services.rag_service import retrieve_relevant_chunks
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api", tags=["ask"])
+router = APIRouter(prefix="/api/v1", tags=["ask"])
 
 
 class AskRequest(BaseModel):

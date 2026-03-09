@@ -1,5 +1,11 @@
 """
 config.py – loads config.yaml and exposes typed settings throughout the app.
+
+Environment variable overrides (all optional):
+  KNOWLEDGE_APP_LLM_MODEL   → llm.ollama.model
+  KNOWLEDGE_APP_DB_PATH     → database.path  (absolute path overrides BASE_DIR resolution)
+  KNOWLEDGE_APP_PORT        → app.port
+  KNOWLEDGE_CONFIG          → path to config.yaml (default: repo root)
 """
 from __future__ import annotations
 
@@ -9,6 +15,9 @@ from pathlib import Path
 
 import yaml
 from pydantic import BaseModel, Field
+
+# Repo root – three levels up from this file (backend/app/config.py → repo root)
+BASE_DIR: Path = Path(__file__).parent.parent.parent.resolve()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -70,12 +79,17 @@ class AppConfig(BaseModel):
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
 
 
+class SecurityConfig(BaseModel):
+    api_key: str = ""  # empty = disabled
+
+
 class Settings(BaseModel):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     rag: RAGConfig = Field(default_factory=RAGConfig)
     app: AppConfig = Field(default_factory=AppConfig)
+    security: SecurityConfig = Field(default_factory=SecurityConfig)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -86,13 +100,31 @@ def _find_config() -> Path:
     """Walk up from this file looking for config.yaml."""
     candidates = [
         Path(os.environ.get("KNOWLEDGE_CONFIG", "")),
-        Path(__file__).parent.parent.parent / "config.yaml",  # repo root
-        Path(__file__).parent.parent / "config.yaml",          # backend/
+        BASE_DIR / "config.yaml",                        # repo root
+        Path(__file__).parent.parent / "config.yaml",    # backend/
     ]
     for c in candidates:
         if c.is_file():
             return c
     return candidates[1]  # default – may not exist, falls back to defaults
+
+
+def _resolve_path(raw: str) -> str:
+    """If *raw* is a relative path, resolve it against BASE_DIR."""
+    p = Path(raw)
+    if p.is_absolute():
+        return str(p)
+    return str(BASE_DIR / p)
+
+
+def _apply_env_overrides(s: Settings) -> None:
+    """Apply KNOWLEDGE_APP_* environment variable overrides in-place."""
+    if model := os.environ.get("KNOWLEDGE_APP_LLM_MODEL"):
+        s.llm.ollama.model = model
+    if db_path := os.environ.get("KNOWLEDGE_APP_DB_PATH"):
+        s.database.path = db_path
+    if port := os.environ.get("KNOWLEDGE_APP_PORT"):
+        s.app.port = int(port)
 
 
 @lru_cache(maxsize=1)
@@ -101,5 +133,15 @@ def get_settings() -> Settings:
     if cfg_path.is_file():
         with open(cfg_path) as f:
             raw = yaml.safe_load(f) or {}
-        return Settings(**raw)
-    return Settings()
+        s = Settings(**raw)
+    else:
+        s = Settings()
+
+    # Resolve relative paths against BASE_DIR
+    s.database.path = _resolve_path(s.database.path)
+    s.storage.upload_dir = _resolve_path(s.storage.upload_dir)
+
+    # Apply environment variable overrides last (highest priority)
+    _apply_env_overrides(s)
+
+    return s

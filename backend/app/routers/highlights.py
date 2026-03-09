@@ -1,7 +1,7 @@
 """
-highlights.py – /api/highlights endpoint.
+highlights.py – /api/v1/highlights endpoint.
 
-POST /api/highlights
+POST /api/v1/highlights
 Body: { "document_id": "...", "language": "en|cs" }
 
 Returns key concepts, key sentences, and main topics extracted by the LLM.
@@ -19,7 +19,7 @@ from .. import database as db
 from ..services import llm_service
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api", tags=["highlights"])
+router = APIRouter(prefix="/api/v1", tags=["highlights"])
 
 MAX_CHARS = 24000  # ~6000 tokens, safe reserve for prompt + response
 
