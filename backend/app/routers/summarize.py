@@ -1,7 +1,7 @@
 """
-summarize.py – /api/summarize endpoint.
+summarize.py – /api/v1/summarize endpoint.
 
-POST /api/summarize
+POST /api/v1/summarize
 Body: { "document_id": "...", "style": "paragraph|bullets|executive", "language": "en|cs" }
 
 Returns a cached or freshly-generated summary.

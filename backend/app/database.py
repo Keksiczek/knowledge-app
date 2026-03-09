@@ -61,7 +61,8 @@ CREATE TABLE IF NOT EXISTS documents (
     status        TEXT DEFAULT 'pending', -- pending | processing | ready | error
     external_id   TEXT,                  -- optional external reference id
     source        TEXT,                  -- teams | email | hub | etc.
-    tags          TEXT                   -- comma-separated tags or JSON
+    tags          TEXT,                  -- comma-separated tags or JSON
+    language      TEXT                   -- cs | en | auto (document language hint)
 );
 
 -- Extracted plain-text chunks (for RAG)
@@ -180,16 +181,17 @@ def save_document(doc: dict) -> None:
         "external_id": doc.get("external_id"),
         "source": doc.get("source"),
         "tags": doc.get("tags"),
+        "language": doc.get("language"),
     }
     with get_db() as conn:
         conn.execute(
             """INSERT OR REPLACE INTO documents
                (id, filename, original_name, file_format, file_size,
                 uploaded_at, text_length, token_count, status,
-                external_id, source, tags)
+                external_id, source, tags, language)
                VALUES (:id, :filename, :original_name, :file_format, :file_size,
                        :uploaded_at, :text_length, :token_count, :status,
-                       :external_id, :source, :tags)""",
+                       :external_id, :source, :tags, :language)""",
             row,
         )
 

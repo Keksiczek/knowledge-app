@@ -1,10 +1,12 @@
 """
 upload.py – file upload and document management endpoints.
 
-POST /api/upload         – upload one or more files; returns document metadata
-GET  /api/documents      – list all documents
-GET  /api/documents/{id} – get single document metadata
-DELETE /api/documents/{id} – remove document and all derived data
+POST   /api/v1/upload                     – upload one or more files
+GET    /api/v1/documents                  – list all documents
+GET    /api/v1/documents/{id}             – get single document metadata
+DELETE /api/v1/documents/{id}             – remove document and all derived data
+POST   /api/v1/documents/{id}/reprocess   – reprocess a failed/stale document
+POST   /api/v1/ingest_text                – ingest raw text directly (no file upload)
 """
 from __future__ import annotations
 
@@ -196,6 +198,7 @@ async def ingest_text(req: IngestTextRequest):
         "external_id": req.external_id,
         "source": req.source,
         "tags": None,
+        "language": req.language,
     }
     db.save_document(doc)
 

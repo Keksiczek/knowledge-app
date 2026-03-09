@@ -1,7 +1,7 @@
 """
-presentation.py – /api/presentation endpoint.
+presentation.py – /api/v1/presentation endpoint.
 
-POST /api/presentation
+POST /api/v1/presentation
 Body: { "document_id": "...", "format": "markdown|pptx", "language": "en|cs" }
 
 Returns a Markdown outline or triggers PPTX generation (returned as binary).

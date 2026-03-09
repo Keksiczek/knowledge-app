@@ -6,10 +6,11 @@ Upload PDFs, DOCX, TXT, Markdown, or PPTX files and get:
 
 | Feature | Endpoint |
 |---|---|
-| Summarise (paragraph / bullets / executive) | `POST /api/summarize` |
-| Key concepts, sentences & topics | `POST /api/highlights` |
-| Presentation outline (Markdown or PPTX) | `POST /api/presentation` |
-| RAG Q&A – ask anything about the doc | `POST /api/ask` |
+| Summarise (paragraph / bullets / executive) | `POST /api/v1/summarize` |
+| Key concepts, sentences & topics | `POST /api/v1/highlights` |
+| Presentation outline (Markdown or PPTX) | `POST /api/v1/presentation` |
+| RAG Q&A – ask anything about the doc | `POST /api/v1/ask` |
+| Ingest raw text directly | `POST /api/v1/ingest_text` |
 
 All processing runs **100 % locally** — no data ever leaves your machine.
 
@@ -25,11 +26,12 @@ knowledge-app/
 │   │   ├── config.py            # Typed settings (reads config.yaml)
 │   │   ├── database.py          # SQLite helpers & schema
 │   │   ├── routers/
-│   │   │   ├── upload.py        # File upload & document management
-│   │   │   ├── summarize.py     # /api/summarize
-│   │   │   ├── highlights.py    # /api/highlights
-│   │   │   ├── presentation.py  # /api/presentation
-│   │   │   └── ask.py           # /api/ask  (RAG)
+│   │   │   ├── upload.py        # File upload, document management, ingest_text
+│   │   │   ├── summarize.py     # /api/v1/summarize
+│   │   │   ├── highlights.py    # /api/v1/highlights
+│   │   │   ├── presentation.py  # /api/v1/presentation
+│   │   │   ├── ask.py           # /api/v1/ask  (RAG)
+│   │   │   └── models.py        # /api/v1/models (Ollama model management)
 │   │   ├── services/
 │   │   │   ├── text_extraction.py  # PDF / DOCX / PPTX -> plain text
 │   │   │   ├── llm_service.py      # Unified LLM client + prompt templates
@@ -154,57 +156,138 @@ llm:
 
 ## API reference
 
-All endpoints accept and return JSON unless otherwise noted.
+All endpoints are under `/api/v1/` and accept/return JSON unless noted.
+Interactive Swagger docs: `http://localhost:8000/api/docs`.
 
 ### Upload files
 ```
-POST /api/upload
+POST /api/v1/upload
 Content-Type: multipart/form-data
-Body: files[] (one or more)
+Body: files[] (one or more; PDF, DOCX, TXT, MD, PPTX; max 50 MB each)
 
-Response 202: { "documents": [ { "id": "...", "status": "pending", ... } ] }
+Response 202:
+{ "documents": [ { "id": "...", "status": "pending", "original_name": "...", ... } ] }
+```
+
+### Ingest raw text
+```
+POST /api/v1/ingest_text
+{
+  "text": "...",
+  "title": "optional title",
+  "external_id": "optional-ref",
+  "source": "hub|teams|email|...",
+  "language": "cs|en|auto"
+}
+
+Response 200: { "id": "...", "status": "ready" }
 ```
 
 ### List / get / delete documents
 ```
-GET    /api/documents
-GET    /api/documents/{id}
-DELETE /api/documents/{id}
+GET    /api/v1/documents
+GET    /api/v1/documents/{id}
+DELETE /api/v1/documents/{id}
+```
+
+Document objects include: `id`, `original_name`, `file_format`, `file_size`,
+`status` (`pending|processing|ready|error`), `text_length`, `token_count`,
+`external_id`, `source`, `tags`, `language`, `uploaded_at`.
+
+### Reprocess a failed document
+```
+POST /api/v1/documents/{id}/reprocess
+
+Response 202: { "id": "...", "status": "pending" }
 ```
 
 ### Summarise
 ```
-POST /api/summarize
-{ "document_id": "...", "style": "paragraph|bullets|executive" }
+POST /api/v1/summarize
+{ "document_id": "...", "style": "paragraph|bullets|executive", "language": "en|cs" }
+
+Response: { "document_id": "...", "style": "...", "summary": "...", "truncated": false, "cached": false }
 ```
 
 ### Highlights
 ```
-POST /api/highlights
-{ "document_id": "..." }
-Response: { "key_concepts": [...], "key_sentences": [...], "topics": [...] }
+POST /api/v1/highlights
+{ "document_id": "...", "language": "en|cs" }
+
+Response: { "key_concepts": [...], "key_sentences": [...], "topics": [...], "truncated": false, "cached": false }
 ```
 
 ### Presentation
 ```
-POST /api/presentation
-{ "document_id": "...", "format": "markdown|pptx" }
+POST /api/v1/presentation
+{ "document_id": "...", "format": "markdown|pptx", "language": "en|cs" }
+
+Response (markdown): { "markdown": "...", "outline": {...}, "truncated": false, "cached": false }
+Response (pptx):     binary .pptx file (Content-Disposition: attachment)
 ```
 
 ### Ask (RAG Q&A)
 ```
-POST /api/ask
+POST /api/v1/ask
 { "document_id": "...", "question": "What is the main finding?" }
+
 Response: { "answer": "...", "sources_used": 5, "cached": false }
+```
+
+### Model management (Ollama)
+```
+GET  /api/v1/models/available   – list locally available models
+POST /api/v1/models/switch      – { "model": "phi3:latest" }
+GET  /api/v1/models/status      – ping Ollama, return current backend/model
 ```
 
 ### Health check
 ```
-GET /api/health
-Response: { "status": "ok", "llm_backend": "ollama", "db_engine": "sqlite" }
+GET /api/v1/health
+
+Response:
+{
+  "status": "ok",
+  "llm_backend": "ollama",
+  "llm_model": "qwen2.5:latest",
+  "db_engine": "sqlite",
+  "embeddings_enabled": true,
+  "documents": 42,
+  "chunks": 1567,
+  "storage_used_mb": 23.4
+}
 ```
 
-Interactive API docs are available at `http://localhost:8000/api/docs`.
+### Authentication (optional)
+
+When `security.api_key` is set in `config.yaml`, all `/api/v1/*` endpoints
+(except `/api/v1/health`) require the header:
+
+```
+X-API-Key: <your-key>
+```
+
+A missing or wrong key returns `401 Unauthorized`.
+
+---
+
+## Environment variables
+
+All settings can be overridden via environment variables (highest priority):
+
+| Variable | Overrides | Example |
+|---|---|---|
+| `KNOWLEDGE_CONFIG` | Path to `config.yaml` | `/etc/knowledge/config.yaml` |
+| `KNOWLEDGE_APP_LLM_MODEL` | `llm.ollama.model` | `phi3:latest` |
+| `KNOWLEDGE_APP_DB_PATH` | `database.path` | `/data/knowledge.db` |
+| `KNOWLEDGE_APP_PORT` | `app.port` | `9000` |
+
+Relative paths in `config.yaml` are resolved from the repository root.
+
+```bash
+# Example: use a custom DB location
+KNOWLEDGE_APP_DB_PATH=/tmp/test.db docker-compose up
+```
 
 ---
 
@@ -264,7 +347,7 @@ Modely lze přepínat přímo v UI (záložka **Settings**) bez restartu serveru
 Alternativně přes API:
 
 ```bash
-curl -X POST http://localhost:8000/api/models/switch \
+curl -X POST http://localhost:8000/api/v1/models/switch \
   -H "Content-Type: application/json" \
   -d '{"model": "phi3:latest"}'
 ```

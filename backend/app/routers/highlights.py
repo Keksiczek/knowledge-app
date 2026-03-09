@@ -1,7 +1,7 @@
 """
-highlights.py – /api/highlights endpoint.
+highlights.py – /api/v1/highlights endpoint.
 
-POST /api/highlights
+POST /api/v1/highlights
 Body: { "document_id": "...", "language": "en|cs" }
 
 Returns key concepts, key sentences, and main topics extracted by the LLM.

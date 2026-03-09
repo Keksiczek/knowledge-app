@@ -1,7 +1,7 @@
 """
-ask.py – /api/ask endpoint (RAG-powered Q&A).
+ask.py – /api/v1/ask endpoint (RAG-powered Qask.py – /api/ask endpoint (RAG-powered Q&A).A).
 
-POST /api/ask
+POST /api/v1/ask
 Body: { "document_id": "...", "question": "What is ...?" }
 
 Uses RAG: retrieves relevant chunks → builds prompt → calls LLM.

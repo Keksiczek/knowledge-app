@@ -1,7 +1,7 @@
 /**
  * app.js – Knowledge App frontend logic
  *
- * No external dependencies. Talks to the FastAPI backend at /api/*.
+ * No external dependencies. Talks to the FastAPI backend at /api/v1/*.
  * Handles: navigation, drag-and-drop upload, library, summary,
  *          highlights, presentation, and RAG Q&A.
  */
