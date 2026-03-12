@@ -28,8 +28,19 @@ Thumbs.db
 
 # Editor
 .idea/
-.vscode/
+.vscode/*
+!.vscode/tasks.json
 *.swp
+
+# Run script artefacts
+knowledge-app.log
+*.log
+.backend.pid
+.frontend.pid
+.ollama.pid
+
+# Local env overrides (keep .env.example, never commit real secrets)
+.env
 
 # Docker
 .docker/
